@@ -12,10 +12,6 @@ using System.Runtime.Serialization;
 using System.Threading;
 using System.Reactive.Concurrency;
 
-#if DOTNETISOLDANDSAD || WINDOWS_PHONE
-using System.Concurrency;
-#endif
-
 namespace ReactiveUI
 {
     /// <summary>
@@ -66,7 +62,7 @@ namespace ReactiveUI
             new Subject<IObservedChange<object, object>>();
 
         [IgnoreDataMember]
-        long changeNotificationsSuppressed = 0;
+        int changeNotificationsSuppressed = 0;
         
         // Constructor
         protected ReactiveObject()
@@ -150,7 +146,7 @@ namespace ReactiveUI
             if (String.IsNullOrEmpty(propertyName))
                 return;
 
-#if !SILVERLIGHT
+#if !SILVERLIGHT && !PORTABLE_LIB
             // Verify that the property name matches a real,
             // public, instance property on this object.
             if (TypeDescriptor.GetProperties(this)[propertyName] == null) {
@@ -162,7 +158,7 @@ namespace ReactiveUI
 
         protected bool areChangeNotificationsEnabled {
             get { 
-#if SILVERLIGHT
+#if SILVERLIGHT || PORTABLE_LIB
                 // N.B. On most architectures, machine word aligned reads are 
                 // guaranteed to be atomic - sorry WP7, you're out of luck
                 return changeNotificationsSuppressed == 0;

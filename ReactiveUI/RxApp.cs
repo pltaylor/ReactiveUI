@@ -35,7 +35,7 @@ namespace ReactiveUI
     {
         static RxApp()
         {
-#if DEBUG
+#if DEBUG && !PORTABLE_LIB
             LoggerFactory = (prefix) => new StdErrLogger(prefix) { CurrentLogLevel = LogLevel.Info };
 #else
             LoggerFactory = (prefix) => new NullLogger(prefix);
@@ -46,12 +46,16 @@ namespace ReactiveUI
             GetFieldNameForPropertyNameFunc = new Func<string,string>(x => "_" + x);
 
             if (InUnitTestRunner()) {
+#if !PORTABLE_LIB
                 Console.Error.WriteLine("*** Detected Unit Test Runner, setting Scheduler to Immediate ***");
                 Console.Error.WriteLine("If we are not actually in a test runner, please file a bug\n");
+#endif
                 DeferredScheduler = Scheduler.Immediate;
 
-#if DEBUG
+#if DEBUG && !PORTABLE_LIB
                 LoggerFactory = (prefix) => new StdErrLogger(prefix) { CurrentLogLevel = LogLevel.Debug };
+#elif PORTABLE_LIB
+                LoggerFactory = (prefix) => new NullLogger(prefix) { CurrentLogLevel = LogLevel.Info };
 #else
                 LoggerFactory = (prefix) => new StdErrLogger(prefix) { CurrentLogLevel = LogLevel.Info };
 #endif
@@ -66,7 +70,6 @@ namespace ReactiveUI
                 });
 #endif
             } else {
-                Console.Error.WriteLine("Initializing to normal mode");
 #if IOS
                 // XXX: This should be an instance of NSRunloopScheduler
                 DeferredScheduler = new EventLoopScheduler();
@@ -220,6 +223,10 @@ namespace ReactiveUI
             }
 
             return ret;
+#elif PORTABLE_LIB
+            // XXX: There is absolutely zero way we can tell if we're in a 
+            // unit test runner.
+            return false;
 #else
             // Try to detect whether we're in design mode - bonus points, 
             // without access to any WPF references :-/
@@ -239,7 +246,7 @@ namespace ReactiveUI
         /// </summary>
         public static void EnableDebugMode()
         {
-            LoggerFactory = (x => new StdErrLogger());
+            //LoggerFactory = (x => new StdErrLogger());
         }
 
 #if FALSE
@@ -477,7 +484,7 @@ namespace ReactiveUI
     public sealed class RefcountDisposeWrapper
     {
         IDisposable _inner;
-        long refCount = 1;
+        int refCount = 1;
 
         public RefcountDisposeWrapper(IDisposable inner) { _inner = inner; }
 
@@ -495,5 +502,12 @@ namespace ReactiveUI
         }
     }
 }
+
+#if WINDOWS_PHONE
+
+// XXX: This is insanity
+internal class ThreadStaticAttribute : Attribute { }
+
+#endif
 
 // vim: tw=120 ts=4 sw=4 et :

@@ -388,7 +388,7 @@ namespace ReactiveUI
             get { return BeforeItemsRemoved.Select(x => (object)x); }
         }
 
-#if !SILVERLIGHT
+#if !SILVERLIGHT && !PORTABLE_LIB
         //
         // N.B: This is a hack to make sure that the ObservableCollection bits 
         // don't end up in the serialized output.

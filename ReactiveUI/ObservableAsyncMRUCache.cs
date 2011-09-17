@@ -195,7 +195,7 @@ namespace ReactiveUI
     {
         readonly ISubject<T> _inner;
         Queue<T> _nextItems = new Queue<T>();
-        long _count;
+        int _count;
         readonly int _maxCount;
 
         public SemaphoreSubject(int maxCount, IScheduler sched = null)

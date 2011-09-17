@@ -17,7 +17,7 @@ namespace System.Diagnostics.Contracts
 
 #endif
 
-#if SILVERLIGHT || IOS
+#if SILVERLIGHT || IOS || PORTABLE_LIB
 
 namespace System.ComponentModel
 {

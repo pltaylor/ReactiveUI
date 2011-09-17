@@ -31,7 +31,7 @@ namespace ReactiveUI
                 new ObservedChange<object, object>() { Sender = o, PropertyName = e.PropertyName });
         }
 
-        long _changeCountSuppressed = 0;
+        int _changeCountSuppressed = 0;
         public IDisposable SuppressChangeNotifications()
         {
             Interlocked.Increment(ref _changeCountSuppressed);
@@ -45,7 +45,7 @@ namespace ReactiveUI
             new ScheduledSubject<IObservedChange<object, object>>(RxApp.DeferredScheduler);
 
         public IObservable<IObservedChange<object, object>> Changing {
-#if SILVERLIGHT
+#if SILVERLIGHT || PORTABLE_LIB
             get { return _Changing.Where(_ => _changeCountSuppressed == 0); }
 #else 
             get { return _Changing.Where(_ => Interlocked.Read(ref _changeCountSuppressed) == 0); }
@@ -56,7 +56,7 @@ namespace ReactiveUI
             new ScheduledSubject<IObservedChange<object, object>>(RxApp.DeferredScheduler);
 
         public IObservable<IObservedChange<object, object>> Changed {
-#if SILVERLIGHT
+#if SILVERLIGHT || PORTABLE_LIB
             get { return _Changed.Where(_ => _changeCountSuppressed == 0); }
 #else 
             get { return _Changed.Where(_ => Interlocked.Read(ref _changeCountSuppressed) == 0); }

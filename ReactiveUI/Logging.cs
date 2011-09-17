@@ -304,6 +304,7 @@ namespace ReactiveUI
         }
     }
 
+#if !PORTABLE_LIB
     public class StdErrLogger : LoggerBase
     {
         public StdErrLogger(string prefix = null)
@@ -348,6 +349,7 @@ namespace ReactiveUI
             lock (gate) { Console.WriteLine("FATAL ERROR: ******" + message + " ******"); }
         }
     }
+#endif
 
 #if SILVERLIGHT
 
