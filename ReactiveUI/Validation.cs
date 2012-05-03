@@ -1,9 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Reactive.Linq;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
+using System.Linq;
 using System.Reactive.Subjects;
 using System.Reflection;
 using System.Runtime.Serialization;
@@ -18,39 +17,55 @@ namespace ReactiveUI
     public class ReactiveValidatedObject : ReactiveObject, IDataErrorInfo
     {
         static readonly Logger log = LogManager.GetCurrentClassLogger();
+        readonly IServiceProvider serviceProvider;
+
+        public ReactiveValidatedObject() : this(null)
+        {
+        }
 
         /// <summary>
         ///
         /// </summary>
-        public ReactiveValidatedObject()
+        public ReactiveValidatedObject(IServiceProvider serviceProvider)
         {
-            this.Changed.Subscribe(x => {
-                if (x.Sender != this) {
+            this.serviceProvider = serviceProvider; // This is optional so allowed to be null.
+
+            this.Changed.Subscribe(x =>
+            {
+                if (x.Sender != this)
+                {
                     return;
                 }
 
-                if (_validationCache.ContainsKey(x.PropertyName)) {
+                if (_validationCache.ContainsKey(x.PropertyName))
+                {
                     _validationCache.Remove(x.PropertyName);
                 }
             });
 
-            _validatedPropertyCount = new Lazy<int>(() => {
-                lock(allValidatedProperties) {
+            _validatedPropertyCount = new Lazy<int>(() =>
+            {
+                lock (allValidatedProperties)
+                {
                     return allValidatedProperties.Get(this.GetType()).Count;
                 }
             });
         }
 
         [IgnoreDataMember]
-        public string Error {
+        public string Error
+        {
             get { return null; }
         }
 
         [IgnoreDataMember]
-        public string this[string columnName] {
-            get {
+        public string this[string columnName]
+        {
+            get
+            {
                 string ret;
-                if (_validationCache.TryGetValue(columnName, out ret)) {
+                if (_validationCache.TryGetValue(columnName, out ret))
+                {
                     return ret;
                 }
 
@@ -60,7 +75,8 @@ namespace ReactiveUI
 
                 _validationCache[columnName] = ret;
 
-                _ValidationObservable.OnNext(new ObservedChange<object, bool>() {
+                _ValidationObservable.OnNext(new ObservedChange<object, bool>
+                {
                     Sender = this, PropertyName = columnName, Value = (ret != null)
                 });
                 return ret;
@@ -69,10 +85,13 @@ namespace ReactiveUI
 
         public bool IsObjectValid()
         {
-            if (_validationCache.Count == _validatedPropertyCount.Value) {
+            if (_validationCache.Count == _validatedPropertyCount.Value)
+            {
                 //return _validationCache.Values.All(x => x == null);
-                foreach(var v in _validationCache.Values) {
-                    if (v != null) {
+                foreach (var v in _validationCache.Values)
+                {
+                    if (v != null)
+                    {
                         return false;
                     }
                 }
@@ -80,13 +99,17 @@ namespace ReactiveUI
             }
 
             IEnumerable<string> allProps;
-            lock (allValidatedProperties) {
+            lock (allValidatedProperties)
+            {
                 allProps = allValidatedProperties.Get(GetType()).Keys;
-            };
+            }
+            ;
 
             //return allProps.All(x => this[x] == null);
-            foreach(var v in allProps) {
-                if (this[v] != null) {
+            foreach (var v in allProps)
+            {
+                if (this[v] != null)
+                {
                     return false;
                 }
             }
@@ -97,14 +120,15 @@ namespace ReactiveUI
         readonly Subject<IObservedChange<object, bool>> _ValidationObservable = new Subject<IObservedChange<object, bool>>();
 
         [IgnoreDataMember]
-        public IObservable<IObservedChange<object, bool>> ValidationObservable {
-            get { return _ValidationObservable;  }
+        public IObservable<IObservedChange<object, bool>> ValidationObservable
+        {
+            get { return _ValidationObservable; }
         }
 
         [IgnoreDataMember]
         readonly Lazy<int> _validatedPropertyCount;
 
-        [IgnoreDataMember] 
+        [IgnoreDataMember]
         readonly Dictionary<string, string> _validationCache = new Dictionary<string, string>();
 
         static readonly MemoizingMRUCache<Type, Dictionary<string, PropertyExtraInfo>> allValidatedProperties =
@@ -116,24 +140,30 @@ namespace ReactiveUI
         {
             PropertyExtraInfo pei;
 
-            lock (allValidatedProperties) {
-                if (!allValidatedProperties.Get(this.GetType()).TryGetValue(propName, out pei)) {
+            lock (allValidatedProperties)
+            {
+                if (!allValidatedProperties.Get(this.GetType()).TryGetValue(propName, out pei))
+                {
                     return null;
                 }
             }
 
-            foreach(var v in pei.ValidationAttributes) {
-                try {
-                    var ctx = new ValidationContext(this, null, null) {MemberName = propName};
+            foreach (var v in pei.ValidationAttributes)
+            {
+                try
+                {
+                    var ctx = new ValidationContext(this, serviceProvider, null) { MemberName = propName };
                     var pi = RxApp.getPropertyInfoForProperty(pei.Type, propName);
                     v.Validate(pi.GetValue(this, null), ctx);
-                } catch(Exception ex) {
-                    log.Info("{0:X}.{1} failed validation: {2}", 
+                }
+                catch (Exception ex)
+                {
+                    log.Info("{0:X}.{1} failed validation: {2}",
                         this.GetHashCode(), propName, ex.Message);
                     return ex.Message;
                 }
             }
-            
+
             return null;
         }
     }
@@ -142,9 +172,15 @@ namespace ReactiveUI
     {
         string _typeFullName;
         Type _Type;
-        public Type Type {
+
+        public Type Type
+        {
             get { return _Type; }
-            set { _Type = value; _typeFullName = value.FullName; }
+            set
+            {
+                _Type = value;
+                _typeFullName = value.FullName;
+            }
         }
 
         public string PropertyName { get; set; }
@@ -155,16 +191,19 @@ namespace ReactiveUI
             object[] attrs;
             var pi = RxApp.getPropertyInfoForProperty(type, propertyName);
 
-            if (pi == null) {
+            if (pi == null)
+            {
                 throw new ArgumentException("Property not found on type");
             }
 
-            attrs = pi.GetCustomAttributes(typeof (ValidationAttribute), true) ?? new ValidationAttribute[0];
-            if (nullOnEmptyValidationAttrs && attrs.Length == 0) {
+            attrs = pi.GetCustomAttributes(typeof(ValidationAttribute), true) ?? new ValidationAttribute[0];
+            if (nullOnEmptyValidationAttrs && attrs.Length == 0)
+            {
                 return null;
             }
 
-            return new PropertyExtraInfo() {
+            return new PropertyExtraInfo
+            {
                 Type = type,
                 PropertyName = propertyName,
                 ValidationAttributes = attrs.Cast<ValidationAttribute>().ToArray(),
@@ -182,12 +221,14 @@ namespace ReactiveUI
         public int CompareTo(object obj)
         {
             var rhs = obj as PropertyExtraInfo;
-            if (rhs == null) {
+            if (rhs == null)
+            {
                 throw new ArgumentException();
             }
 
             int ret = 0;
-            if ((ret = this._typeFullName.CompareTo(rhs._typeFullName)) != 0) {
+            if ((ret = this._typeFullName.CompareTo(rhs._typeFullName)) != 0)
+            {
                 return ret;
             }
 
@@ -200,7 +241,7 @@ namespace ReactiveUI
     /// </summary>
     public abstract class ValidationBase : ValidationAttribute
     {
-        public bool AllowNull = false;
+        public bool AllowNull;
         public bool AllowBlanks = true;
 
         /// <summary>
