@@ -43,11 +43,11 @@ namespace ReactiveUI
                 }
             });
 
-            _validatedPropertyCount = new Lazy<int>(() =>
+            _validatedProperties = new Lazy<Dictionary<string, PropertyExtraInfo>>(() =>
             {
                 lock (allValidatedProperties)
                 {
-                    return allValidatedProperties.Get(this.GetType()).Count;
+                    return allValidatedProperties.Get(GetType());
                 }
             });
         }
@@ -73,7 +73,10 @@ namespace ReactiveUI
                 ret = getPropertyValidationError(columnName);
                 log.Debug("Validation result: {0}", ret);
 
-                _validationCache[columnName] = ret;
+                if (_validatedProperties.Value.ContainsKey(columnName))
+                {
+                    _validationCache[columnName] = ret;
+                }
 
                 _ValidationObservable.OnNext(new ObservedChange<object, bool>
                 {
@@ -85,7 +88,7 @@ namespace ReactiveUI
 
         public bool IsObjectValid()
         {
-            if (_validationCache.Count == _validatedPropertyCount.Value)
+            if (_validationCache.Count == _validatedProperties.Value.Count)
             {
                 //return _validationCache.Values.All(x => x == null);
                 foreach (var v in _validationCache.Values)
@@ -126,7 +129,7 @@ namespace ReactiveUI
         }
 
         [IgnoreDataMember]
-        readonly Lazy<int> _validatedPropertyCount;
+        readonly Lazy<Dictionary<string, PropertyExtraInfo>> _validatedProperties;
 
         [IgnoreDataMember]
         readonly Dictionary<string, string> _validationCache = new Dictionary<string, string>();
