@@ -1,11 +1,8 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Diagnostics.Contracts;
 using System.Linq.Expressions;
 using System.Reactive.Concurrency;
 using System.Reactive.Linq;
-using System.Reactive.Subjects;
 using NLog;
 
 namespace ReactiveUI
@@ -42,9 +39,9 @@ namespace ReactiveUI
         /// provided on - this should normally be a Dispatcher-based scheduler
         /// (and is by default)</param>
         public ObservableAsPropertyHelper(
-            IObservable<T> observable, 
-            Action<T> onChanged, 
-            T initialValue = default(T), 
+            IObservable<T> observable,
+            Action<T> onChanged,
+            T initialValue = default(T),
             IScheduler scheduler = null)
         {
             Contract.Requires(observable != null);
@@ -54,7 +51,8 @@ namespace ReactiveUI
             _lastValue = initialValue;
 
             var subj = new ScheduledSubject<T>(scheduler);
-            subj.Subscribe(x => {
+            subj.Subscribe(x =>
+            {
                 log.Debug("Property helper {0:X} changed", this.GetHashCode());
                 _lastValue = x;
                 onChanged(x);
@@ -72,10 +70,13 @@ namespace ReactiveUI
         /// <summary>
         /// The last provided value from the Observable. 
         /// </summary>
-        public T Value {
-            get {
-                if (_lastException != null) {
-                    log.Error("Observable ended with OnError", _lastException);
+        public T Value
+        {
+            get
+            {
+                if (_lastException != null)
+                {
+                    log.ErrorException("Observable ended with OnError", _lastException);
                     throw _lastException;
                 }
                 return _lastValue;
@@ -87,7 +88,8 @@ namespace ReactiveUI
         /// steps should be taken to ensure that Observables provided to OAPH should
         /// never complete or fail.
         /// </summary>
-        public Exception BindingException {
+        public Exception BindingException
+        {
             get { return _lastException; }
         }
 
@@ -137,11 +139,11 @@ namespace ReactiveUI
         /// <returns>An initialized ObservableAsPropertyHelper; use this as the
         /// backing field for your property.</returns>
         public static ObservableAsPropertyHelper<TRet> ObservableToProperty<TObj, TRet>(
-                this TObj This,
-                IObservable<TRet> observable,
-                Expression<Func<TObj, TRet>> property,
-                TRet initialValue = default(TRet),
-                IScheduler scheduler = null)
+            this TObj This,
+            IObservable<TRet> observable,
+            Expression<Func<TObj, TRet>> property,
+            TRet initialValue = default(TRet),
+            IScheduler scheduler = null)
             where TObj : ReactiveObject
         {
             Contract.Requires(This != null);
@@ -149,8 +151,8 @@ namespace ReactiveUI
             Contract.Requires(property != null);
 
             string prop_name = RxApp.simpleExpressionToPropertyName(property);
-            var ret = new ObservableAsPropertyHelper<TRet>(observable, 
-                _ => This.raisePropertyChanged(prop_name), 
+            var ret = new ObservableAsPropertyHelper<TRet>(observable,
+                _ => This.raisePropertyChanged(prop_name),
                 initialValue, scheduler);
 
             log.Debug("OAPH {0:X} is for {1}", ret, prop_name);

@@ -3,14 +3,12 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Diagnostics.Contracts;
-using System.Reactive.Disposables;
-using System.Linq;
 using System.Linq.Expressions;
+using System.Reactive.Disposables;
 using System.Reactive.Subjects;
 using System.Reflection;
 using System.Runtime.Serialization;
 using System.Threading;
-using System.Reactive.Concurrency;
 using NLog;
 
 #if DOTNETISOLDANDSAD || WINDOWS_PHONE
@@ -29,10 +27,10 @@ namespace ReactiveUI
     {
         static readonly Logger log = LogManager.GetCurrentClassLogger();
 
-        [field:IgnoreDataMember]
+        [field: IgnoreDataMember]
         public event PropertyChangingEventHandler PropertyChanging;
 
-        [field:IgnoreDataMember]
+        [field: IgnoreDataMember]
         public event PropertyChangedEventHandler PropertyChanged;
 
         /// <summary>
@@ -40,7 +38,8 @@ namespace ReactiveUI
         /// be changed.         
         /// </summary>
         [IgnoreDataMember]
-        public IObservable<IObservedChange<object, object>> Changing {
+        public IObservable<IObservedChange<object, object>> Changing
+        {
             get { return changingSubject; }
         }
 
@@ -48,8 +47,10 @@ namespace ReactiveUI
         /// Represents an Observable that fires *after* a property has changed.
         /// </summary>
         [IgnoreDataMember]
-        public IObservable<IObservedChange<object, object>> Changed {
-            get {
+        public IObservable<IObservedChange<object, object>> Changed
+        {
+            get
+            {
 #if DEBUG
                 log.Debug("Changed Subject 0x{0:X}", changedSubject.GetHashCode());
 #endif
@@ -60,17 +61,17 @@ namespace ReactiveUI
         [IgnoreDataMember]
         protected Lazy<PropertyInfo[]> allPublicProperties;
 
-        [IgnoreDataMember] 
-        readonly Subject<IObservedChange<object, object>> changingSubject = 
+        [IgnoreDataMember]
+        readonly Subject<IObservedChange<object, object>> changingSubject =
             new Subject<IObservedChange<object, object>>();
 
         [IgnoreDataMember]
-        readonly Subject<IObservedChange<object, object>> changedSubject = 
+        readonly Subject<IObservedChange<object, object>> changedSubject =
             new Subject<IObservedChange<object, object>>();
 
         [IgnoreDataMember]
-        long changeNotificationsSuppressed = 0;
-        
+        long changeNotificationsSuppressed;
+
         // Constructor
         protected ReactiveObject()
         {
@@ -78,7 +79,10 @@ namespace ReactiveUI
         }
 
         [OnDeserialized]
-        void setupRxObj(StreamingContext sc) { setupRxObj(); }
+        void setupRxObj(StreamingContext sc)
+        {
+            setupRxObj();
+        }
 
         void setupRxObj()
         {
@@ -109,12 +113,14 @@ namespace ReactiveUI
                 return;
 
             var handler = this.PropertyChanging;
-            if (handler != null) {
+            if (handler != null)
+            {
                 var e = new PropertyChangingEventArgs(propertyName);
                 handler(this, e);
             }
 
-            notifyObservable(new ObservedChange<object, object>() {
+            notifyObservable(new ObservedChange<object, object>
+            {
                 PropertyName = propertyName, Sender = this, Value = null
             }, changingSubject);
         }
@@ -126,18 +132,21 @@ namespace ReactiveUI
             verifyPropertyName(propertyName);
             log.Debug("{0:X}.{1} changed", this.GetHashCode(), propertyName);
 
-            if (!areChangeNotificationsEnabled) {
+            if (!areChangeNotificationsEnabled)
+            {
                 log.Debug("Suppressed change");
                 return;
             }
 
             var handler = this.PropertyChanged;
-            if (handler != null) {
+            if (handler != null)
+            {
                 var e = new PropertyChangedEventArgs(propertyName);
                 handler(this, e);
             }
 
-            notifyObservable(new ObservedChange<object, object>() {
+            notifyObservable(new ObservedChange<object, object>
+            {
                 PropertyName = propertyName, Sender = this, Value = null
             }, changedSubject);
         }
@@ -156,21 +165,24 @@ namespace ReactiveUI
 #if !SILVERLIGHT
             // Verify that the property name matches a real,
             // public, instance property on this object.
-            if (TypeDescriptor.GetProperties(this)[propertyName] == null) {
+            if (TypeDescriptor.GetProperties(this)[propertyName] == null)
+            {
                 string msg = "Invalid property name: " + propertyName;
                 log.Error(msg);
             }
 #endif
         }
 
-        protected bool areChangeNotificationsEnabled {
-            get { 
+        protected bool areChangeNotificationsEnabled
+        {
+            get
+            {
 #if SILVERLIGHT
-                // N.B. On most architectures, machine word aligned reads are 
-                // guaranteed to be atomic - sorry WP7, you're out of luck
+    // N.B. On most architectures, machine word aligned reads are 
+    // guaranteed to be atomic - sorry WP7, you're out of luck
                 return changeNotificationsSuppressed == 0;
 #else
-                return (Interlocked.Read(ref changeNotificationsSuppressed) == 0); 
+                return (Interlocked.Read(ref changeNotificationsSuppressed) == 0);
 #endif
             }
         }
@@ -180,14 +192,17 @@ namespace ReactiveUI
 #if DEBUG
             log.Debug("Firing observable to subject 0x{0:X}", subject.GetHashCode());
 #endif
-            try {
+            try
+            {
                 subject.OnNext(item);
-            } catch (Exception ex) {
-                log.Error(ex);
+            }
+            catch (Exception ex)
+            {
+                log.ErrorException("Exception while notifying observables.", ex);
                 subject.OnError(ex);
             }
         }
-    } 
+    }
 
     public static class ReactiveObjectExpressionMixin
     {
@@ -203,22 +218,23 @@ namespace ReactiveUI
         /// always the 'value' keyword.</param>
         /// <returns>The newly set value, normally discarded.</returns>
         public static TRet RaiseAndSetIfChanged<TObj, TRet>(
-                this TObj This, 
-                Expression<Func<TObj, TRet>> property, 
-                TRet newValue)
+            this TObj This,
+            Expression<Func<TObj, TRet>> property,
+            TRet newValue)
             where TObj : ReactiveObject
         {
             Contract.Requires(This != null);
             Contract.Requires(property != null);
 
             FieldInfo field;
-            string prop_name = RxApp.simpleExpressionToPropertyName<TObj, TRet>(property);
+            string prop_name = RxApp.simpleExpressionToPropertyName(property);
 
             field = RxApp.getFieldInfoForProperty<TObj>(prop_name);
 
             var field_val = field.GetValue(This);
 
-            if (EqualityComparer<TRet>.Default.Equals((TRet)field_val, (TRet)newValue)) {
+            if (EqualityComparer<TRet>.Default.Equals((TRet)field_val, newValue))
+            {
                 return newValue;
             }
 
@@ -228,7 +244,6 @@ namespace ReactiveUI
 
             return newValue;
         }
-        
 
         /// <summary>
         /// RaiseAndSetIfChanged fully implements a Setter for a read-write
@@ -246,16 +261,17 @@ namespace ReactiveUI
         /// always the 'value' keyword.</param>
         /// <returns>The newly set value, normally discarded.</returns>
         public static TRet RaiseAndSetIfChanged<TObj, TRet>(
-                this TObj This,
-                Expression<Func<TObj, TRet>> property,
-                ref TRet backingField,
-                TRet newValue)
+            this TObj This,
+            Expression<Func<TObj, TRet>> property,
+            ref TRet backingField,
+            TRet newValue)
             where TObj : ReactiveObject
         {
             Contract.Requires(This != null);
             Contract.Requires(property != null);
 
-            if (EqualityComparer<TRet>.Default.Equals(backingField, newValue)) {
+            if (EqualityComparer<TRet>.Default.Equals(backingField, newValue))
+            {
                 return newValue;
             }
 
@@ -274,8 +290,8 @@ namespace ReactiveUI
         /// <param name="property">An Expression representing the property (i.e.
         /// 'x => x.SomeProperty'</param>
         public static void RaisePropertyChanging<TObj, TRet>(
-                this TObj This,
-                Expression<Func<TObj, TRet>> property)
+            this TObj This,
+            Expression<Func<TObj, TRet>> property)
             where TObj : ReactiveObject
         {
             var propName = RxApp.simpleExpressionToPropertyName(property);
@@ -289,8 +305,8 @@ namespace ReactiveUI
         /// <param name="property">An Expression representing the property (i.e.
         /// 'x => x.SomeProperty'</param>
         public static void RaisePropertyChanged<TObj, TRet>(
-                this TObj This,
-                Expression<Func<TObj, TRet>> property)
+            this TObj This,
+            Expression<Func<TObj, TRet>> property)
             where TObj : ReactiveObject
         {
             var propName = RxApp.simpleExpressionToPropertyName(property);
