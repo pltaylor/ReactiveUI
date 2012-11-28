@@ -12,6 +12,15 @@ using System.Text;
 
 namespace ReactiveUI
 {
+    class PropertySubscription
+    {
+        public IDisposable Subscription { get; set; }
+        public Func<object, object> Getter { get; set; }
+        public Func<object, IObservable<IObservedChange<object, object>>> Notifier { get; set; }
+        public string Property { get; set; }
+        public object CurrentSender { get; set; }
+    }
+
     public static class ReactiveNotifyPropertyChangedMixin
     {
         /// <summary>
@@ -27,7 +36,7 @@ namespace ReactiveUI
         /// immediately before a property is going to change.</param>
         /// <returns>An Observable representing the property change
         /// notifications for the given property.</returns>
-        public static IObservable<IObservedChange<TSender, TValue>> ObservableForProperty<TSender, TValue>(
+        public static IObservable<IObservedChange<TSender, TValue>> ObservableForPropertyOld<TSender, TValue>(
                 this TSender This,
                 Expression<Func<TSender, TValue>> property,
                 bool beforeChange = false)
@@ -73,6 +82,118 @@ namespace ReactiveUI
             });
         }
 
+        public static IObservable<IObservedChange<TSender, object>> ObservableForProperty<TSender>(
+            this TSender This,
+            string[] property,
+            bool beforeChange = false)
+        {
+            var types = Reflection.GetTypesForPropChain(This.GetType(), property);
+            var slots = property.Zip(types, (prop, type) => {
+                var notifFactory = notifyFactoryCache2.Get(Tuple.Create(type, beforeChange));
+
+                return new PropertySubscription() {
+                    Property = prop, Getter = Reflection.GetValueFetcherForProperty(type, prop),
+                    Notifier = obj => notifFactory.GetNotificationForProperty(obj, prop, beforeChange),
+                    Subscription = Disposable.Empty, CurrentSender = null,
+                };
+            });
+
+            var slotList = new LinkedList<PropertySubscription>(slots);
+            var ret = new Subject<IObservedChange<TSender, object>>();
+            var propNameString = String.Join(".", slotList.Select(x => x.Property));
+
+            if (This == null) {
+                throw new ArgumentNullException("Sender");
+            }
+
+            return Observable.Create<IObservedChange<TSender, object>>(x => {
+                var disp = ret.Subscribe(x);
+
+                return Disposable.Create(() => {
+                    disp.Dispose();
+                    slotList.ForEach(y => y.Subscription.Dispose());
+                });
+            });
+        }
+
+        public static IObservable<IObservedChange<TSender, TValue>> ObservableForProperty<TSender, TValue>(
+            this TSender This,
+            Expression<Func<TSender, TValue>> property,
+            bool beforeChange = false)
+        {
+            var chain = Reflection.ExpressionToPropertyNames(property);
+            var types = new[] { typeof(TSender) }.Concat(Reflection.GetTypesForPropChain(This.GetType(), chain));
+            var slots = chain.Zip(types, (prop, type) => {
+                var notifFactory = notifyFactoryCache2.Get(Tuple.Create(type, beforeChange));
+                var getter = Reflection.GetValueFetcherForProperty(type, prop);
+                var currentProp = prop;
+
+                return new PropertySubscription() {
+                    Property = prop, Getter = getter,
+                    Notifier = obj => notifFactory.GetNotificationForProperty(obj, currentProp, beforeChange),
+                    Subscription = Disposable.Empty, CurrentSender = null,
+                };
+            });
+
+            var slotList = new LinkedList<PropertySubscription>(slots);
+            var ret = new Subject<IObservedChange<TSender, TValue>>();
+            var propNameString = String.Join(".", slotList.Select(x => x.Property));
+
+            if (This == null) {
+                throw new ArgumentNullException("Sender");
+            }
+
+            subscribeToExpressionChain2(This, propNameString, ret, This, slotList.First);
+
+            return Observable.Create<IObservedChange<TSender, TValue>>(x => {
+                var disp = ret.Subscribe(x);
+
+                return Disposable.Create(() => {
+                    disp.Dispose();
+                    slotList.ForEach(y => y.Subscription.Dispose());
+                });
+            });
+        }
+
+        static void subscribeToExpressionChain2<TSender, TValue>(
+            TSender rootObject,
+            string propNameString,
+            Subject<IObservedChange<TSender, TValue>> target,
+            object currentSender,
+            LinkedListNode<PropertySubscription> slotList)
+        {
+            var current = slotList;
+            var sender = currentSender;
+            while (current != null) {
+                current.Value.Subscription.Dispose(); 
+                current.Value.Subscription = Disposable.Empty; 
+                current.Value.CurrentSender = null;
+                current = current.Next;
+            }
+
+            current = slotList;
+            while (current.Next != null) {
+                var propSub = current.Value;
+                var item = current;
+
+                propSub.CurrentSender = currentSender;
+                propSub.Subscription = propSub.Notifier(currentSender).Subscribe(_ => 
+                    subscribeToExpressionChain2(rootObject, propNameString, target, propSub.CurrentSender, item));
+
+                sender = propSub.Getter(sender);
+                current = (currentSender != null ? current.Next : null);
+            }
+
+            if (current == null) return;
+            
+            current.Value.Subscription = current.Value.Notifier(currentSender).Subscribe(_ =>
+                target.OnNext(new ObservedChange<TSender, TValue>() {
+                    Sender = rootObject, PropertyName = propNameString,
+                    Value = (TValue)current.Value.Getter(sender),
+                }));
+        }
+
+
         /// <summary>
         /// ObservableForPropertyDynamic returns an Observable representing the
         /// property change notifications for a specific property on a
@@ -86,13 +207,14 @@ namespace ReactiveUI
         /// immediately before a property is going to change.</param>
         /// <returns>An Observable representing the property change
         /// notifications for the given property.</returns>
-        public static IObservable<IObservedChange<TSender, object>> ObservableForProperty<TSender>(
+        public static IObservable<IObservedChange<TSender, object>> ObservableForPropertyOld<TSender>(
                 this TSender This,
                 string[] property,
                 bool beforeChange = false)
         {
             var propertyNames = new LinkedList<string>(property);
             var subscriptions = new LinkedList<IDisposable>(propertyNames.Select(x => (IDisposable) null));
+
             var ret = new Subject<IObservedChange<TSender, object>>();
 
             if (This == null) {
@@ -132,6 +254,30 @@ namespace ReactiveUI
             });
         }
 
+        /// <summary>
+        /// ObservableForProperty returns an Observable representing the
+        /// property change notifications for a specific property on a
+        /// ReactiveObject, running the IObservedChange through a Selector
+        /// function.
+        /// </summary>
+        /// <param name="property">An Expression representing the property (i.e.
+        /// 'x => x.SomeProperty'</param>
+        /// <param name="selector">A Select function that will be run on each
+        /// item.</param>
+        /// <param name="beforeChange">If True, the Observable will notify
+        /// immediately before a property is going to change.</param>
+        /// <returns>An Observable representing the property change
+        /// notifications for the given property.</returns>
+        public static IObservable<TRet> ObservableForProperty<TSender, TValue, TRet>(
+                this TSender This, 
+                Expression<Func<TSender, TValue>> property, 
+                Func<TValue, TRet> selector, 
+                bool beforeChange = false)
+            where TSender : class
+        {           
+            Contract.Requires(selector != null);
+            return This.ObservableForProperty(property, beforeChange).Select(x => selector(x.Value));
+        }
 
         static void subscribeToExpressionChain<TSender, TValue>(
                 TSender origSource,
@@ -231,6 +377,15 @@ namespace ReactiveUI
             });
         }
 
+        static readonly MemoizingMRUCache<Tuple<Type, bool>, ICreatesObservableForProperty> notifyFactoryCache2 =
+            new MemoizingMRUCache<Tuple<Type, bool>, ICreatesObservableForProperty>((t, _) => {
+                return RxApp.GetAllServices<ICreatesObservableForProperty>()
+                    .Aggregate(Tuple.Create(0, (ICreatesObservableForProperty)null), (acc, x) => {
+                        int score = x.GetAffinityForObject(t.Item1, t.Item2);
+                        return (score > acc.Item1 && score > 0) ? Tuple.Create(score, x) : acc;
+                    }).Item2;
+            }, 50);
+
         static readonly MemoizingMRUCache<Type, ICreatesObservableForProperty> notifyFactoryCache =
             new MemoizingMRUCache<Type, ICreatesObservableForProperty>((t, _) => {
                 return RxApp.GetAllServices<ICreatesObservableForProperty>()
@@ -242,7 +397,7 @@ namespace ReactiveUI
 
         static IObservable<IObservedChange<object, object>> notifyForProperty(object sender, string propertyName, bool beforeChange)
         {
-            var result = notifyFactoryCache.Get(sender.GetType());
+            var result = notifyFactoryCache.Get(sender.GetType(), beforeChange);
             if (result == null) {
                 throw new Exception(
                     String.Format("Couldn't find a ICreatesObservableForProperty for {0}. This should never happen, your service locator is probably broken.", 
@@ -266,66 +421,6 @@ namespace ReactiveUI
             ret.Append(current.Value);
             return ret.ToString();
         }
-
-
-        /// <summary>
-        /// ObservableForProperty returns an Observable representing the
-        /// property change notifications for a specific property on a
-        /// ReactiveObject, running the IObservedChange through a Selector
-        /// function.
-        /// </summary>
-        /// <param name="property">An Expression representing the property (i.e.
-        /// 'x => x.SomeProperty'</param>
-        /// <param name="selector">A Select function that will be run on each
-        /// item.</param>
-        /// <param name="beforeChange">If True, the Observable will notify
-        /// immediately before a property is going to change.</param>
-        /// <returns>An Observable representing the property change
-        /// notifications for the given property.</returns>
-        public static IObservable<TRet> ObservableForProperty<TSender, TValue, TRet>(
-                this TSender This, 
-                Expression<Func<TSender, TValue>> property, 
-                Func<TValue, TRet> selector, 
-                bool beforeChange = false)
-            where TSender : class
-        {           
-            Contract.Requires(selector != null);
-            return This.ObservableForProperty(property, beforeChange).Select(x => selector(x.Value));
-        }
-
-        /* NOTE: This is left here for reference - the real one is expanded out 
-         * to 10 parameters in VariadicTemplates.tt */
-#if FALSE
-        public static IObservable<TRet> WhenAny<TSender, T1, T2, TRet>(this TSender This, 
-                Expression<Func<TSender, T1>> property1, 
-                Expression<Func<TSender, T2>> property2,
-                Func<IObservedChange<TSender, T1>, IObservedChange<TSender, T2>, TRet> selector)
-            where TSender : IReactiveNotifyPropertyChanged
-        {
-            var slot1 = new ObservedChange<TSender, T1>() {
-                Sender = This,
-                PropertyName = String.Join(".", RxApp.expressionToPropertyNames(property1)),
-            };
-            T1 slot1Value = default(T1); slot1.TryGetValue(out slot1Value); slot1.Value = slot1Value;
-
-            var slot2 = new ObservedChange<TSender, T2>() {
-                Sender = This,
-                PropertyName = String.Join(".", RxApp.expressionToPropertyNames(property2)),
-            };
-            T2 slot2Value = default(T2); slot2.TryGetValue(out slot2Value); slot2.Value = slot2Value;
-
-            IObservedChange<TSender, T1> islot1 = slot1;
-            IObservedChange<TSender, T2> islot2 = slot2;
-            return Observable.CreateWithDisposable<TRet>(subject => {
-                subject.OnNext(selector(slot1, slot2));
-
-                return Observable.Merge(
-                    This.ObservableForProperty(property1).Do(x => { lock (slot1) { islot1 = x.fillInValue(); } }).Select(x => selector(islot1, islot2)),
-                    This.ObservableForProperty(property2).Do(x => { lock (slot2) { islot2 = x.fillInValue(); } }).Select(x => selector(islot1, islot2))
-                ).Subscribe(subject);
-            });
-        }
-#endif
     }
 }
 
