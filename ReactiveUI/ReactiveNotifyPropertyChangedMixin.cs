@@ -87,24 +87,30 @@ namespace ReactiveUI
             string[] property,
             bool beforeChange = false)
         {
-            var types = Reflection.GetTypesForPropChain(This.GetType(), property);
-            var slots = property.Zip(types, (prop, type) => {
+            var chain = property.Concat(new string[] {null});
+            var types = new[] {typeof (TSender)}.Concat(Reflection.GetTypesForPropChain(This.GetType(), chain.SkipLast(1)));
+
+            var slots = chain.Zip(types, (prop, type) => {
                 var notifFactory = notifyFactoryCache2.Get(Tuple.Create(type, beforeChange));
+                var getter = prop != null ? Reflection.GetValueFetcherForProperty(type, prop) : null;
+                var currentProp = prop;
 
                 return new PropertySubscription() {
-                    Property = prop, Getter = Reflection.GetValueFetcherForProperty(type, prop),
-                    Notifier = obj => notifFactory.GetNotificationForProperty(obj, prop, beforeChange),
+                    Property = prop, Getter = getter,
+                    Notifier = obj => notifFactory.GetNotificationForProperty(obj, currentProp, beforeChange),
                     Subscription = Disposable.Empty, CurrentSender = null,
                 };
             });
 
             var slotList = new LinkedList<PropertySubscription>(slots);
             var ret = new Subject<IObservedChange<TSender, object>>();
-            var propNameString = String.Join(".", slotList.Select(x => x.Property));
+            var propNameString = String.Join(".", slotList.Select(x => x.Property).SkipLast(1));
 
             if (This == null) {
                 throw new ArgumentNullException("Sender");
             }
+
+            subscribeToExpressionChain2(This, propNameString, ret, This, slotList.First);
 
             return Observable.Create<IObservedChange<TSender, object>>(x => {
                 var disp = ret.Subscribe(x);
@@ -138,7 +144,7 @@ namespace ReactiveUI
 
             var slotList = new LinkedList<PropertySubscription>(slots);
             var ret = new Subject<IObservedChange<TSender, TValue>>();
-            var propNameString = String.Join(".", slotList.Select(x => x.Property));
+            var propNameString = String.Join(".", slotList.Select(x => x.Property).SkipLast(1));
 
             if (This == null) {
                 throw new ArgumentNullException("Sender");
@@ -187,7 +193,7 @@ namespace ReactiveUI
 
             if (current == null) return;
             
-            current.Value.Subscription = current.Value.Notifier(currentSender).Subscribe(_ =>
+            current.Value.Subscription = current.Previous.Value.Notifier(current.Previous.Value.CurrentSender).Subscribe(_ =>
                 target.OnNext(new ObservedChange<TSender, TValue>() {
                     Sender = rootObject, PropertyName = propNameString,
                     Value = (TValue)current.Previous.Value.Getter(current.Previous.Value.CurrentSender),
