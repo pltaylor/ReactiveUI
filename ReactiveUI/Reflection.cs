@@ -157,7 +157,7 @@ namespace ReactiveUI
             return GetTypesForPropChain(startingType, propNames);
         }
 
-        public static Type[] GetTypesForPropChain(Type startingType, string[] propNames)
+        public static Type[] GetTypesForPropChain(Type startingType, IEnumerable<string> propNames)
         {
             return propNames.Aggregate(new List<Type>(new[] {startingType}), (acc, x) => {
                 var type = acc.Last();

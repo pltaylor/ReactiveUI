@@ -121,11 +121,12 @@ namespace ReactiveUI
             Expression<Func<TSender, TValue>> property,
             bool beforeChange = false)
         {
-            var chain = Reflection.ExpressionToPropertyNames(property);
-            var types = new[] { typeof(TSender) }.Concat(Reflection.GetTypesForPropChain(This.GetType(), chain));
+            var chain = Reflection.ExpressionToPropertyNames(property).Concat(new string[] {null});
+            var types = new[] {typeof (TSender)}.Concat(Reflection.GetTypesForPropChain(This.GetType(), chain.SkipLast(1)));
+
             var slots = chain.Zip(types, (prop, type) => {
                 var notifFactory = notifyFactoryCache2.Get(Tuple.Create(type, beforeChange));
-                var getter = Reflection.GetValueFetcherForProperty(type, prop);
+                var getter = prop != null ? Reflection.GetValueFetcherForProperty(type, prop) : null;
                 var currentProp = prop;
 
                 return new PropertySubscription() {
@@ -176,7 +177,7 @@ namespace ReactiveUI
                 var propSub = current.Value;
                 var item = current;
 
-                propSub.CurrentSender = currentSender;
+                propSub.CurrentSender = sender;
                 propSub.Subscription = propSub.Notifier(currentSender).Subscribe(_ => 
                     subscribeToExpressionChain2(rootObject, propNameString, target, propSub.CurrentSender, item));
 
@@ -189,7 +190,7 @@ namespace ReactiveUI
             current.Value.Subscription = current.Value.Notifier(currentSender).Subscribe(_ =>
                 target.OnNext(new ObservedChange<TSender, TValue>() {
                     Sender = rootObject, PropertyName = propNameString,
-                    Value = (TValue)current.Value.Getter(sender),
+                    Value = (TValue)current.Previous.Value.Getter(current.Previous.Value.CurrentSender),
                 }));
         }
 
